@@ -290,6 +290,7 @@ end
 
 %%% AUXILILARY FUNCTIONS
 
+% POSSIBLE MODIFICATION 2 - modify the difference kernels created here
 function [FDH,FDV,FDHC,FDVC] = createDiffkernels(nl,nc,r)
     dh = zeros(nl,nc);
     dh(1,1) = 1;
@@ -443,6 +444,7 @@ end
 
 
 
+% POSSIBLE MODIFICATION 1 - change gradient computation
 function W = computeWeights(Y,d,sigmas,nl)
 
     hr_bands = d==1;
@@ -487,6 +489,7 @@ end
 
 
 
+% POSSIBLE MODIFICATION 2 (change something here)?
 function [J,gradJ,AtAg] = grad_cost_G(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W)
     X=F*Z;
     BX=ConvCM(X,FBM,nl);
