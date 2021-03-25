@@ -86,6 +86,8 @@ function [Xhat_im , output ] = S2sharp(Yim,varargin)
     end
     Gstep_only=0;
     GCV = 0;
+    W_method = 'original';
+    diff_method = 'original';
     output = struct('SAMm',[],'SAMm_2m',[],'SRE',[], 'GCVscore',[], 'ERGAS_20m', [], ...
         'ERGAS_60m', [], 'SSIM', [], 'aSSIM', [], 'RMSE', [], 'Time', []);
     for i=1:2:(length(varargin)-1)
@@ -108,6 +110,10 @@ function [Xhat_im , output ] = S2sharp(Yim,varargin)
                 Gstep_only = varargin{i+1};
             case 'GCV'
                 GCV = varargin{i+1};
+            case 'W_method'
+                W_method = varargin{i+1};
+            case 'diff_method'
+                diff_method = varargin{i+1};
         end
     end
     tic;
@@ -144,9 +150,9 @@ function [Xhat_im , output ] = S2sharp(Yim,varargin)
         F = F(:,1:r);
         Z = D(1:r,1:r)*V(:,1:r)';
     end
-    [FDH,FDV,FDHC,FDVC] = createDiffkernels(nl,nc,r);
+    [FDH,FDV,FDHC,FDVC] = createDiffkernels(nl,nc,r,diff_method);
     sigmas = 1;
-    W = computeWeights(Y,d,sigmas,nl);
+    W = computeWeights(Y,d,sigmas,nl,W_method);
     Whalf=W.^(1/2);
     if( GCV == 1), Gstep_only=1; end
     if( Gstep_only ~= 0), CDiter=1; end
@@ -291,13 +297,44 @@ end
 %%% AUXILILARY FUNCTIONS
 
 % POSSIBLE MODIFICATION 2 - modify the difference kernels created here
-function [FDH,FDV,FDHC,FDVC] = createDiffkernels(nl,nc,r)
+function [FDH,FDV,FDHC,FDVC] = createDiffkernels(nl,nc,r,method)
     dh = zeros(nl,nc);
-    dh(1,1) = 1;
-    dh(1,nc) = -1;
     dv = zeros(nl,nc);
-    dv(1,1) = 1;
-    dv(nl,1) = -1;
+    switch method
+        case 'original'
+            dh(1,1) = 1;
+            dh(1,nc) = -1;
+            dv(1,1) = 1;
+            dv(nl,1) = -1;
+        case 'prewitt'
+            dh(nl,nc) = -1;
+            dh(1,nc) = -1;
+            dh(2,nc) = -1;
+            dh(nl,2) = 1;
+            dh(1,2) = 1;
+            dh(2,2) = 1;
+            
+            dv(nl, nc) = -1;
+            dv(nl,1) = -1;
+            dv(nl,2) = -1;
+            dv(2,nc) = 1;
+            dv(2,1) = 1;
+            dv(2,2) = 1;
+        case 'sobel'
+            dh(nl,nc) = -1;
+            dh(1,nc) = -2;
+            dh(2,nc) = -1;
+            dh(nl,2) = 1;
+            dh(1,2) = 2;
+            dh(2,2) = 1;
+            
+            dv(nl, nc) = -1;
+            dv(nl,1) = -2;
+            dv(nl,2) = -1;
+            dv(2,nc) = 1;
+            dv(2,1) = 2;
+            dv(2,2) = 1;
+    end
     FDH = repmat(fft2(dh),1,1,r);
     FDV = repmat(fft2(dv),1,1,r);
     FDHC = conj(FDH);
@@ -445,12 +482,20 @@ end
 
 
 % POSSIBLE MODIFICATION 1 - change gradient computation
-function W = computeWeights(Y,d,sigmas,nl)
+function W = computeWeights(Y,d,sigmas,nl, method)
 
     hr_bands = d==1;
     hr_bands = find(hr_bands)';
     for i=hr_bands
-        grad(:,:,i) = imgradient(conv2im(Y(i,:),nl),'intermediate').^2;
+        switch method
+            case 'original' 
+                grad(:,:,i) = imgradient(conv2im(Y(i,:),nl),'intermediate').^2;
+            case 'sobel' 
+                grad(:,:,i) = imgradient(conv2im(Y(i,:),nl),'sobel').^2;
+            case 'prewitt' 
+                grad(:,:,i) = imgradient(conv2im(Y(i,:),nl),'prewitt').^2;
+                
+        end
     end
     grad = sqrt(max(grad,[],3));
     grad = grad / quantile(grad(:),0.95);
