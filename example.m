@@ -12,13 +12,27 @@ ni = 5;  % number of iterations / one can select fewer iterations (e.g. ni=2) wh
           % but is much quicker
 lam = 1.8998e-04;
 
-methods = {'original','prewitt','sobel'};
 
-for ii = 1:3
-    w_method = methods{ii};
-    diff_method = methods{ii};
+%wmethods = {'original','original','prewitt','sobel'};
+%dmethods = {'original','original_shift','prewitt','sobel'};
+%wmethods = {'original','prewitt','sobel'};
+wmethods = {'sobel'};
+
+%hopefully setup MIRT
+addpath('irt/utilities');
+addpath('irt/penalty');
+
+DELTA = 0.75;
+potobj = potential_fun('huber',DELTA);
+psidiff = @(x)(potobj.dpot(x));
+%psidiff = @(x) m_huber_dpot(x,DELTA);
+
+%wmethods = {'original', 'original', 'original'};
+%dmethods = {'original', 'original', 'original'};
+for ii = 1:length(wmethods)
+    w_method = wmethods{ii};
     [ Xhat_im, output_S2 ]=S2sharp(Yim,'Xm_im',Xm_im,'r',r,'lambda',lam,'q',q, ...
-        'CDiter',ni,'W_method',w_method,'diff_method',diff_method);
+        'CDiter',ni,'W_method',w_method,'dpot',psidiff);
 
     % Output
     S2sharp_SRE = output_S2.SRE{end}([1,5,6,7,9:12]);
@@ -30,7 +44,8 @@ for ii = 1:3
     S2sharp_ERGAS_20m=output_S2.ERGAS_20m(end);
     S2sharp_time = output_S2.Time;
 
-    disp(['METHOD  = ' w_method ':']);
+    disp(['WEIGHT METHOD  = ' w_method ':']);
+    disp(['DIFF METHOD  = ' diff_method ':']);
     disp(['S2sharp: Best lambda=' num2str(lam(end))]);
     disp(['S2sharp: SAM=' num2str(S2sharp_SAM)])
     disp(['Average SRE = ' num2str(S2sharp_aSRE)]);

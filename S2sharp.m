@@ -36,6 +36,9 @@ function [Xhat_im , output ] = S2sharp(Yim,varargin)
 %           X0: Initial value for X = G * F'
 %   Gstep_only: If Gstep_only=1 then perform the G-step (once). Assuming that F is fixed
 %          GCV: If GCV=1 then the GCV value is computed.
+%     W_method: imgradient option to use to construct the W matrix:
+%               'original', 'sobel', or 'prewitt'
+%         dpot: derivative of potential function to use in regularization
 % Output:   output is a structure containing the following fields
 %    Xhat_im: estimated image (3D) at high resolution (10m) for each 
 %             spectral channel
@@ -87,7 +90,7 @@ function [Xhat_im , output ] = S2sharp(Yim,varargin)
     Gstep_only=0;
     GCV = 0;
     W_method = 'original';
-    diff_method = 'original';
+    dpot = @(x) x;
     output = struct('SAMm',[],'SAMm_2m',[],'SRE',[], 'GCVscore',[], 'ERGAS_20m', [], ...
         'ERGAS_60m', [], 'SSIM', [], 'aSSIM', [], 'RMSE', [], 'Time', []);
     for i=1:2:(length(varargin)-1)
@@ -112,8 +115,8 @@ function [Xhat_im , output ] = S2sharp(Yim,varargin)
                 GCV = varargin{i+1};
             case 'W_method'
                 W_method = varargin{i+1};
-            case 'diff_method'
-                diff_method = varargin{i+1};
+            case 'dpot'
+                dpot = varargin{i+1};
         end
     end
     tic;
@@ -150,21 +153,21 @@ function [Xhat_im , output ] = S2sharp(Yim,varargin)
         F = F(:,1:r);
         Z = D(1:r,1:r)*V(:,1:r)';
     end
-    [FDH,FDV,FDHC,FDVC] = createDiffkernels(nl,nc,r,diff_method);
+    [FDH,FDV,FDHC,FDVC] = createDiffkernels(nl,nc,r);
     sigmas = 1;
     W = computeWeights(Y,d,sigmas,nl,W_method);
     Whalf=W.^(1/2);
     if( GCV == 1), Gstep_only=1; end
     if( Gstep_only ~= 0), CDiter=1; end
     for jCD=1:CDiter
-       [Z,Jcost(jCD),options]=Zstep(Y,FBM,F,lambda,nl,nc,Z,Mask,q,FDH,FDV,FDHC,FDVC,W,Whalf,tolgradnorm);              
+       [Z,Jcost(jCD),options]=Zstep(Y,FBM,F,lambda,nl,nc,Z,Mask,q,FDH,FDV,FDHC,FDVC,W,Whalf,tolgradnorm, dpot);              
        if(Gstep_only==0) 
            F1=Fstep(F,Z,Y,FBM,nl,nc,Mask);  
            F=F1;
        end
        if( GCV==1 )
             Ynoise = ( abs(Y) > 0 ) .* randn( size(Y) );
-            [Znoise]=Zstep(Ynoise,FBM,F,lambda,nl,nc,Z,Mask,q,FDH,FDV,FDHC,FDVC,W,Whalf,tolgradnorm);
+            [Znoise]=Zstep(Ynoise,FBM,F,lambda,nl,nc,Z,Mask,q,FDH,FDV,FDHC,FDVC,W,Whalf,tolgradnorm, dpot);
             HtHBXnoise = Mask.*ConvCM(F*Znoise,FBM,nl);
             Ynoise = Ynoise([1,5,6,7,9:12],:); 
             HtHBXnoise = HtHBXnoise([1,5,6,7,9:12],:);
@@ -201,24 +204,25 @@ function [Y,M,F]=initialization(Yim2,sdf,nl,nc,L,dx,dy,d,limsub,r)
 end
 
 
-function [Z, xcost,options]=Zstep(Y,FBM,F,tau,nl,nc,Z,Mask,q,FDH,FDV,FDHC,FDVC,W,Whalf,tolgradnorm)
+function [Z, xcost,options]=Zstep(Y,FBM,F,tau,nl,nc,Z,Mask,q,FDH,FDV,FDHC,FDVC,W, Whalf,tolgradnorm, dpot)
     r = size(F,2);
     n = nl*nc;     
     UBTMTy=F'*ConvCM(Y,conj(FBM),nl); 
-    [Z] = CG(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W);
+    [Z] = CG(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W,Whalf,dpot);
     xcost=1;
     options=[];    
 end      
 
 function F1=Fstep(F,Z,Y,FBM,nl,nc,Mask)
+
+     [L,r]=size(F);
      F0=F;%   U; % initialization
      BTXhat =  ConvCM(F0*Z,FBM,nl);
      MBTXhat=Mask.*BTXhat;
-     [L,r]=size(F);
      for ii=1:L
-        MBZT(:,:,ii)=repmat(Mask(ii,:),[r,1]).*ConvCM(Z,repmat(FBM(:,:,ii),[1,1,r]),nl);
-        A(:,:,ii)=MBZT(:,:,ii)*MBZT(:,:,ii)';
-        ZBMTy(:,ii)=MBZT(:,:,ii)*Y(ii,:)';
+       MBZT(:,:,ii)=repmat(Mask(ii,:),[r,1]).*ConvCM(Z,repmat(FBM(:,:,ii),[1,1,r]),nl);
+       A(:,:,ii)=MBZT(:,:,ii)*MBZT(:,:,ii)';
+       ZBMTy(:,ii)=MBZT(:,:,ii)*Y(ii,:)';
      end
      ZBYT=ZBMTy';%    BTY*Z';
      manifold = stiefelfactory(L,r,1); %euclideanfactory(L,r); 
@@ -296,45 +300,17 @@ end
 
 %%% AUXILILARY FUNCTIONS
 
-% POSSIBLE MODIFICATION 2 - modify the difference kernels created here
-function [FDH,FDV,FDHC,FDVC] = createDiffkernels(nl,nc,r,method)
+function [FDH,FDV,FDHC,FDVC] = createDiffkernels(nl,nc,r)
     dh = zeros(nl,nc);
     dv = zeros(nl,nc);
-    switch method
-        case 'original'
-            dh(1,1) = 1;
-            dh(1,nc) = -1;
-            dv(1,1) = 1;
-            dv(nl,1) = -1;
-        case 'prewitt'
-            dh(nl,nc) = -1;
-            dh(1,nc) = -1;
-            dh(2,nc) = -1;
-            dh(nl,2) = 1;
-            dh(1,2) = 1;
-            dh(2,2) = 1;
-            
-            dv(nl, nc) = -1;
-            dv(nl,1) = -1;
-            dv(nl,2) = -1;
-            dv(2,nc) = 1;
-            dv(2,1) = 1;
-            dv(2,2) = 1;
-        case 'sobel'
-            dh(nl,nc) = -1;
-            dh(1,nc) = -2;
-            dh(2,nc) = -1;
-            dh(nl,2) = 1;
-            dh(1,2) = 2;
-            dh(2,2) = 1;
-            
-            dv(nl, nc) = -1;
-            dv(nl,1) = -2;
-            dv(nl,2) = -1;
-            dv(2,nc) = 1;
-            dv(2,1) = 2;
-            dv(2,2) = 1;
-    end
+    
+    %These kernels are flipped so that they are applied through filtering
+    %or correlation, not convolution
+
+    dh(1,1) = 1;
+    dh(1,nc) = -1;
+    dv(1,1) = 1;
+    dv(nl,1) = -1;
     FDH = repmat(fft2(dh),1,1,r);
     FDV = repmat(fft2(dv),1,1,r);
     FDHC = conj(FDH);
@@ -491,9 +467,9 @@ function W = computeWeights(Y,d,sigmas,nl, method)
             case 'original' 
                 grad(:,:,i) = imgradient(conv2im(Y(i,:),nl),'intermediate').^2;
             case 'sobel' 
-                grad(:,:,i) = imgradient(conv2im(Y(i,:),nl),'sobel').^2;
+                grad(:,:,i) = (1/16)*(imgradient(conv2im(Y(i,:),nl),'sobel').^2);
             case 'prewitt' 
-                grad(:,:,i) = imgradient(conv2im(Y(i,:),nl),'prewitt').^2;
+                grad(:,:,i) = (1/9)*(imgradient(conv2im(Y(i,:),nl),'prewitt').^2);
                 
         end
     end
@@ -535,24 +511,45 @@ end
 
 
 % POSSIBLE MODIFICATION 2 (change something here)?
-function [J,gradJ,AtAg] = grad_cost_G(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W)
+% Change function from direct quadratic to one of Fessler's other potential
+% functions or whatever
+% And add an option for no weighting at all and just using the potential to
+% preserve edges
+function [J,gradJ,AtAg] = grad_cost_G(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W,Whalf,dpot)
     X=F*Z;
     BX=ConvCM(X,FBM,nl);
     HtHBX=Mask.*BX;
     ZH=ConvCM(Z,FDHC,nl);
-    Zv=ConvCM(Z,FDVC,nl);
-    ZHW=ZH.*W;
-    ZVW=Zv.*W;
-    grad_pen=ConvCM(ZHW,FDH,nl)+ConvCM(ZVW,FDV,nl);
+    ZV=ConvCM(Z,FDVC,nl);
+    ZHW=ZH.*Whalf;
+    ZVW=ZV.*Whalf;
+        
+    ZHW = dpot(ZHW);
+    ZVW = dpot(ZVW);
+    
+    %DELTA = 0.75;
+    %hmask = abs(ZHW) > DELTA;
+    %vmask = abs(ZVW) > DELTA;
+    %ZHW(hmask) = DELTA.*sign(ZHW(hmask));
+    %ZVW(vmask) = DELTA.*sign(ZVW(vmask));
+    
+    ZHW=ZHW.*Whalf;
+    ZVW=ZVW.*Whalf;
+    
+    grad_pen_h = ConvCM(ZHW,FDH,nl);
+    grad_pen_v = ConvCM(ZVW,FDV,nl);
+    grad_pen = grad_pen_h + grad_pen_v;
+    
+    
     AtAg = F'*ConvCM(HtHBX,conj(FBM),nl)+2*tau*(q*ones(1,nl*nc)).*grad_pen;
     gradJ=AtAg-UBTMTy;
     J = 1/2 * sum( sum( Z .* AtAg ) ) - sum( sum( Z.*UBTMTy ) );     
 end
 
-function [ Z ] = CG(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W)
+function [ Z ] = CG(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W,Whalf,dpot)
     maxiter = 1000;
     tolgradnorm = 0.1;  %1e-6;   %0.1 
-    [cost,grad] = grad_cost_G(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W);
+    [cost,grad] = grad_cost_G(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W,Whalf,dpot);
     gradnorm = norm(grad(:));
     iter = 0;
     res = -grad;
@@ -565,7 +562,7 @@ function [ Z ] = CG(Z,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W)
             beta = ( res(:).' * res(:) ) / ( old_res(:).' * old_res(:) );
             desc_dir = res + beta * desc_dir;
         end
-        [~, ~, AtAp] = grad_cost_G(desc_dir,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W);
+        [~, ~, AtAp] = grad_cost_G(desc_dir,F,Y,UBTMTy,FBM,Mask,nl,nc,r,tau,q,FDH,FDV,FDHC,FDVC,W,Whalf,dpot);
         alpha = ( res(:).' * res(:) ) / ( desc_dir(:).' * AtAp(:) );
         Z1 = Z + alpha * desc_dir;
         old_res = res;
