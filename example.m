@@ -16,7 +16,7 @@ lam = 1.8998e-04;
 %wmethods = {'original','original','prewitt','sobel'};
 %dmethods = {'original','original_shift','prewitt','sobel'};
 %wmethods = {'original','prewitt','sobel'};
-wmethods = {'sobel'};
+wmethods = {'nothing','sobel'};
 
 %hopefully setup MIRT
 addpath('irt/utilities');

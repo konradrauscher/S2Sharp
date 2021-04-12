@@ -460,6 +460,11 @@ end
 % POSSIBLE MODIFICATION 1 - change gradient computation
 function W = computeWeights(Y,d,sigmas,nl, method)
 
+    if strcmp(method,'nothing')
+        W = ones([1 size(Y,2)]);
+        return
+    end
+
     hr_bands = d==1;
     hr_bands = find(hr_bands)';
     for i=hr_bands
