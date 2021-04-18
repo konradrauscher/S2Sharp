@@ -16,44 +16,53 @@ lam = 1.8998e-04;
 %wmethods = {'original','original','prewitt','sobel'};
 %dmethods = {'original','original_shift','prewitt','sobel'};
 %wmethods = {'original','prewitt','sobel'};
-wmethods = {'nothing','sobel'};
-
+%wmethods = {'sobel'};
+%potnames = {'quad'};
+potnames = {'hyper3','huber','broken','cauchy'};
+potdeltas = {    0.5,   0.75,     0.5,     0.5};
 %hopefully setup MIRT
 addpath('irt/utilities');
 addpath('irt/penalty');
 
-DELTA = 0.75;
-potobj = potential_fun('huber',DELTA);
-psidiff = @(x)(potobj.dpot(x));
 %psidiff = @(x) m_huber_dpot(x,DELTA);
 
 %wmethods = {'original', 'original', 'original'};
 %dmethods = {'original', 'original', 'original'};
 for ii = 1:length(wmethods)
-    w_method = wmethods{ii};
-    [ Xhat_im, output_S2 ]=S2sharp(Yim,'Xm_im',Xm_im,'r',r,'lambda',lam,'q',q, ...
-        'CDiter',ni,'W_method',w_method,'dpot',psidiff);
+    for jj = 1:length(potnames)
+        w_method = wmethods{ii};
+        potname = potnames{jj};
+        delta = potdeltas{jj};
 
-    % Output
-    S2sharp_SRE = output_S2.SRE{end}([1,5,6,7,9:12]);
-    S2sharp_SAM = output_S2.SAMm(end);
-    S2sharp_aSRE= mean(S2sharp_SRE );    
-    S2sharp_RMSE = output_S2.RMSE(end);
-    S2sharp_aSSIM = output_S2.aSSIM(end);
-    S2sharp_ERGAS_60m=output_S2.ERGAS_60m(end);
-    S2sharp_ERGAS_20m=output_S2.ERGAS_20m(end);
-    S2sharp_time = output_S2.Time;
+        potobj = potential_fun(potname, delta);
+        psidiff = @(x)(potobj.dpot(x));
+        [ Xhat_im, output_S2 ]=S2sharp(Yim,'Xm_im',Xm_im,'r',r,'lambda',lam,'q',q, ...
+            'CDiter',ni,'W_method',w_method,'dpot',psidiff);
 
-    disp(['WEIGHT METHOD  = ' w_method ':']);
-    disp(['DIFF METHOD  = ' diff_method ':']);
-    disp(['S2sharp: Best lambda=' num2str(lam(end))]);
-    disp(['S2sharp: SAM=' num2str(S2sharp_SAM)])
-    disp(['Average SRE = ' num2str(S2sharp_aSRE)]);
-    disp(['S2sharp aSSIM = ' num2str(S2sharp_aSSIM)]);
-    disp(['S2sharp RMSE = ' num2str(S2sharp_RMSE)]);
-    disp(['S2sharp time = ' num2str(S2sharp_time)]);
-    disp(['S2sharp: SRE:'])
-    disp(['B1    B5    B6    B7    B8a   B9    B11   B12'])
-    fprintf('%0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f\n\n', S2sharp_SRE)
+        % Output
+        S2sharp_SRE = output_S2.SRE{end}([1,5,6,7,9:12]);
+        S2sharp_SAM = output_S2.SAMm(end);
+        S2sharp_aSRE= mean(S2sharp_SRE );    
+        S2sharp_RMSE = output_S2.RMSE(end);
+        S2sharp_NRMSE = output_S2.NRMSE(end);
+        S2sharp_aSSIM = output_S2.aSSIM(end);
+        S2sharp_ERGAS_60m=output_S2.ERGAS_60m(end);
+        S2sharp_ERGAS_20m=output_S2.ERGAS_20m(end);
+        S2sharp_time = output_S2.Time;
+
+        disp(['WEIGHT METHOD = ' w_method]);
+        disp(['POTENTIAL FUNCTION = ' potname]);
+        disp(['POTENTIAL FUNCTION DELTA = ' num2str(delta)]);
+        disp(['S2sharp: Best lambda = ' num2str(lam(end))]);
+        disp(['S2sharp: SAM = ' num2str(S2sharp_SAM)])
+        disp(['Average SRE = ' num2str(S2sharp_aSRE)]);
+        disp(['S2sharp aSSIM = ' num2str(S2sharp_aSSIM)]);
+        disp(['S2sharp RMSE = ' num2str(S2sharp_RMSE)]);
+        disp(['S2sharp NRMSE = ' num2str(S2sharp_NRMSE)]);
+        disp(['S2sharp time = ' num2str(S2sharp_time)]);
+        disp(['S2sharp: SRE:'])
+        disp(['B1    B5    B6    B7    B8a   B9    B11   B12'])
+        fprintf('%0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f\n\n', S2sharp_SRE)
+    end
 end
 
