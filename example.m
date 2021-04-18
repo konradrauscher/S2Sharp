@@ -18,15 +18,18 @@ lam = 1.8998e-04;
 %wmethods = {'original','prewitt','sobel'};
 %wmethods = {'sobel'};
 %potnames = {'quad'};
-potnames = {'hyper3','huber','broken','cauchy'};
-potdeltas = {    0.5,   0.75,     0.5,     0.5};
+%potnames = {'hyper3','huber','broken','cauchy'};
+%potdeltas = {    0.5,   0.75,     0.5,     0.5};
+wmethods = {'nothing', 'original', 'sobel'};
+potnames = {'quad','cauchy'};
+potdeltas = {  nan,   0.5};
+
 %hopefully setup MIRT
 addpath('irt/utilities');
 addpath('irt/penalty');
 
 %psidiff = @(x) m_huber_dpot(x,DELTA);
 
-%wmethods = {'original', 'original', 'original'};
 %dmethods = {'original', 'original', 'original'};
 for ii = 1:length(wmethods)
     for jj = 1:length(potnames)
@@ -66,3 +69,22 @@ for ii = 1:length(wmethods)
     end
 end
 
+%% Display low-res/sharpened version of band 
+BANDNUM = 1;%1 and 10 seem to give best results
+limsub = 2;
+Xm_disp = Xm_im(limsub+1:end-limsub,limsub+1:end-limsub,:);
+
+B1_lowres = Yim{BANDNUM};
+B1_truth = Xm_disp(:,:,BANDNUM);
+B1_sharpened = Xhat_im(:,:,BANDNUM);
+
+clim = [min(B1_truth(:)),max(B1_truth(:))];
+
+B1_lowres_upsampled = imresize(B1_lowres,size(Xm_im(:,:,1)));
+B1_lowres_upsampled = B1_lowres_upsampled(limsub+1:end-limsub,limsub+1:end-limsub,:);
+
+axes = [];
+figure; imagesc(B1_lowres_upsampled); colormap gray; caxis(clim); colorbar; title('Low resolution band'); axes(end+1) = gca;
+figure; imagesc(B1_sharpened); colormap gray; caxis(clim);  colorbar; title('Sharpened band'); axes(end+1) = gca;
+figure; imagesc(B1_truth); colormap gray; caxis(clim);  colorbar; title('Ground truth'); axes(end+1) = gca;
+linkaxes(axes);
